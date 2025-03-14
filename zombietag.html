@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Zombie Tag (P2P)</title>
+</head>
+<body>
+    <h1>Zombie Tag</h1>
+    <p>An example MMO using the Lightseed p2p game engine. </p>
+    <canvas id="gameCanvas" width="800" height="600" style="border: 1px solid black;"></canvas>
+    <div>
+        <label>Your Peer ID: <span id="peerId"></span></label><br>
+        <input id="connectId" placeholder="Enter peer ID to connect">
+        <button onclick="connectToPeer()">Connect</button>
+    </div>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <script src="lightseed.js"></script> <!-- Include the PeerSelector library -->
+    <script src="game.js"></script>
+</body>
+</html>
