@@ -31,8 +31,8 @@ class Player {
     }
 }
 
-// PeerSelector setup
-const peerSelector = new PeerSelector({
+// PeerSelector (LightSeed) setup
+const peerSelector = new LightSeed({
     worldSize: 800,
     maxDepth: 5,
     capacity: 4,
@@ -48,9 +48,9 @@ const peerSelector = new PeerSelector({
 // Game state
 const players = {};
 let localPlayerId;
-const connections = new Map(); // Store PeerJS connections
+const connections = new Map();
 
-// Initialize PeerJS
+// Initialize PeerJS with dynamic ID
 const peer = new Peer({
     host: '0.peerjs.com',
     port: 443,
@@ -62,15 +62,16 @@ peer.on('open', (id) => {
     localPlayerId = id;
     document.getElementById('peerId').textContent = id;
     console.log(`Local peer ID: ${id}`);
-    // Initialize local player
     players[localPlayerId] = new Player(localPlayerId, 400, 300);
     peerSelector.insertPeer(localPlayerId, 400, 300);
+    initializeMatchmaking(id);
 });
 
 peer.on('connection', (conn) => {
     connections.set(conn.peer, conn);
     conn.on('open', () => {
         console.log(`Connected to ${conn.peer}`);
+        sendInitialState(conn.peer);
     });
     conn.on('data', handleReceivedData);
     conn.on('close', () => {
@@ -79,22 +80,62 @@ peer.on('connection', (conn) => {
     });
 });
 
-// Function to connect to another peer
-window.connectToPeer = () => {
-    const connectId = document.getElementById('connectId').value;
-    if (connectId && connectId !== localPlayerId && !connections.has(connectId)) {
-        const conn = peer.connect(connectId);
-        connections.set(connectId, conn);
-        conn.on('open', () => {
-            console.log(`Connected to ${connectId}`);
-        });
-        conn.on('data', handleReceivedData);
-        conn.on('close', () => {
-            connections.delete(connectId);
-            console.log(`${connectId} disconnected`);
+// Matchmaking via WebSocket
+const MATCHMAKING_URL = 'ws://localhost:8082';
+const ws = new WebSocket(MATCHMAKING_URL);
+
+function initializeMatchmaking(peerId) {
+    ws.onopen = () => {
+        console.log('Connected to matchmaking');
+        ws.send(JSON.stringify({ type: 'register', peerId }));
+    };
+
+    ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        if (data.type === 'peerList') {
+            connectToPeers(data.peers);
+        }
+    };
+
+    ws.onerror = (err) => {
+        console.error('Matchmaking error:', err);
+    };
+}
+
+function connectToPeers(peerList) {
+    peerList.forEach((peerId) => {
+        if (peerId !== localPlayerId && !connections.has(peerId)) {
+            const conn = peer.connect(peerId);
+            connections.set(peerId, conn);
+            conn.on('open', () => {
+                console.log(`Connected to ${peerId}`);
+                sendInitialState(peerId);
+            });
+            conn.on('data', handleReceivedData);
+            conn.on('close', () => {
+                connections.delete(peerId);
+                console.log(`${peerId} disconnected`);
+            });
+        }
+    });
+}
+
+// Send initial state to a peer
+function sendInitialState(peerId) {
+    const localPlayer = players[localPlayerId];
+    if (localPlayer) {
+        sendUpdate(peerId, {
+            id: localPlayerId,
+            x: localPlayer.x,
+            y: localPlayer.y,
+            vx: localPlayer.vx,
+            vy: localPlayer.vy,
+            isZombie: localPlayer.isZombie,
+            infectionTimer: localPlayer.infectionTimer,
+            timestamp: Date.now()
         });
     }
-};
+}
 
 // Handle incoming data
 function handleReceivedData(data) {
@@ -102,8 +143,8 @@ function handleReceivedData(data) {
     if (!players[id]) {
         players[id] = new Player(id, x, y, isZombie);
         peerSelector.insertPeer(id, x, y);
+        console.log(`Added new player ${id} at (${x}, ${y})`);
     }
-    // Update if timestamp is newer
     if (timestamp > players[id].lastUpdate) {
         players[id].x = x;
         players[id].y = y;
@@ -112,7 +153,7 @@ function handleReceivedData(data) {
         players[id].isZombie = isZombie;
         players[id].infectionTimer = infectionTimer;
         players[id].lastUpdate = timestamp;
-        peerSelector.updatePeer(id, x, y, vx, vy, 1.0, 0.050); // Update TDF and latency as placeholder
+        peerSelector.updatePeer(id, x, y, vx, vy, 1.0, 0.050);
     }
 }
 
@@ -147,7 +188,7 @@ document.addEventListener('keyup', (e) => {
 
 // Game loop
 let lastUpdateTime = 0;
-const UPDATE_INTERVAL = 1000 / 30; // ~30 updates per second
+const UPDATE_INTERVAL = 1000 / 30;
 
 function gameLoop(timestamp) {
     if (!localPlayerId) {
@@ -155,7 +196,7 @@ function gameLoop(timestamp) {
         return;
     }
 
-    // **Local Physics**
+    // Local Physics
     players[localPlayerId].move();
     for (let id in players) {
         if (id !== localPlayerId) {
@@ -163,7 +204,7 @@ function gameLoop(timestamp) {
         }
     }
 
-    // **Collision Detection and Infection**
+    // Collision Detection and Infection
     for (let id in players) {
         if (id !== localPlayerId && players[id].isZombie && !players[localPlayerId].isZombie) {
             const dx = players[localPlayerId].x - players[id].x;
@@ -175,7 +216,7 @@ function gameLoop(timestamp) {
         }
     }
 
-    // **Infection Timer**
+    // Infection Timer
     for (let id in players) {
         if (players[id].infectionTimer && Date.now() - players[id].infectionTimer >= 60000) {
             players[id].isZombie = true;
@@ -183,7 +224,7 @@ function gameLoop(timestamp) {
         }
     }
 
-    // **PeerSelector and P2P Updates**
+    // PeerSelector and P2P Updates
     if (timestamp - lastUpdateTime >= UPDATE_INTERVAL) {
         for (let id in players) {
             peerSelector.updatePeer(id, players[id].x, players[id].y, players[id].vx, players[id].vy, 1.0, 0.050);
@@ -207,7 +248,7 @@ function gameLoop(timestamp) {
         lastUpdateTime = timestamp;
     }
 
-    // **Rendering**
+    // Rendering
     ctx.clearRect(0, 0, 800, 600);
     for (let id in players) {
         players[id].draw();
@@ -219,9 +260,18 @@ function gameLoop(timestamp) {
 // Start the game loop
 requestAnimationFrame(gameLoop);
 
-// For testing: Start one player as a zombie
+// Randomly assign one player as a zombie
 setTimeout(() => {
-    if (localPlayerId === 'player1') { // Arbitrary choice for demo
+    if (localPlayerId && Math.random() < 0.5) {
         players[localPlayerId].isZombie = true;
+        console.log(`${localPlayerId} starts as a zombie`);
     }
 }, 1000);
+
+// Debug printout for number of users (browser only)
+if (typeof window !== 'undefined') {
+    setInterval(() => {
+        const numUsers = Object.keys(players).length;
+        console.log(`[${localPlayerId}] Current number of users: ${numUsers}`);
+    }, 5000); // Every 5 seconds
+}

@@ -2,7 +2,7 @@
 A peer to peer relativistic game engine
 
 ## Usage
-1. Initialization: Create a PeerSelector instance with optional configuration.
+1. Initialization: Create a LightSeed instance with optional configuration.
 2. Insert Peers: Add peers with their initial positions.
 3. Update Peer Data: Update positions, velocities, TDFs, and latencies as the game state changes.
 4. Select Peers: Call selectPeers to get a list of peers to send updates to, with selection probabilities.
@@ -32,3 +32,16 @@ Finally, we tackle how to mask delays. If a player has high latency, updates fro
 Why It Works
 
 This system combines spatial efficiency (quadtree), smart prioritization (peer selection), and perception adjustment (TDF) to keep the game smooth and consistent. By focusing updates on nearby, low-latency peers with similar game speeds, we ensure critical info spreads fast where it matters most. Adjusting each player’s game time hides network hiccups, so everyone feels like they’re playing in real-time, even in a decentralized P2P setup. It’s a practical, scalable way to manage latency without needing a central server—or a physics degree!
+
+## Example: Zombie Tag
+How to Test
+Setup:
+Ensure index.html, lightseed.js (your library file), and game.js are in the same directory.
+
+Serve with an HTTP server:
+bash
+
+npx http-server -p 8081
+node server.js 
+
+Check the browser console (F12) for logs every 5 seconds, e.g., [Q7jK9pL2mN] Current number of users: 3.

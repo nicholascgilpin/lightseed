@@ -241,10 +241,13 @@ class LightSeed {
 }
 
 // Export the class (optional, depending on environment)
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = LightSeed;
+// In LightSeed.js
+if (typeof window !== 'undefined') {
+    window.LightSeed = LightSeed; // Make it globally available in the browser
 }
-
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = LightSeed; // Keep Node.js compatibility
+}
 // Example usage (commented out for library use)
 /*
 const LightSeed = new LightSeed();
